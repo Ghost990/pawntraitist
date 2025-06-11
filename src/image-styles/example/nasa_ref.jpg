@@ -1,0 +1,7 @@
+<svg width="800" height="1200" xmlns="http://www.w3.org/2000/svg">
+      <rect width="800" height="1200" fill="#f0f0f0"/>
+      <rect x="250" y="300" width="300" height="400" fill="#d0d0d0" stroke="#808080" stroke-width="2"/>
+      <circle cx="400" cy="250" r="150" fill="#f0f0f0" stroke="#808080" stroke-width="2"/>
+      <text x="400" y="600" font-family="Arial" font-size="24" text-anchor="middle" fill="#404040">Astronaut Suit Placeholder</text>
+      <text x="400" y="650" font-family="Arial" font-size="18" text-anchor="middle" fill="#404040">(Replace with actual astronaut image)</text>
+    </svg>

@@ -1,103 +1,244 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useDropzone } from "react-dropzone";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [referencePreview, setReferencePreview] = useState<string>("");
+  const [resultImage, setResultImage] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [astronautImage, setAstronautImage] = useState<string>("");
+  const [maskImage, setMaskImage] = useState<string>("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Load the astronaut and mask images on component mount
+  useEffect(() => {
+    // Set paths to the static images
+    const astronautPath = "/nasa.jpg";
+    const maskPath = "/mask.png";
+    
+    // Check if images exist by preloading them
+    const preloadAstronaut = new window.Image();
+    const preloadMask = new window.Image();
+    
+    preloadAstronaut.onload = () => setAstronautImage(astronautPath);
+    preloadAstronaut.onerror = () => {
+      console.error("Failed to load astronaut image");
+      setError("Failed to load astronaut image. Please check that the image exists in the public directory.");
+    };
+    
+    preloadMask.onload = () => setMaskImage(maskPath);
+    preloadMask.onerror = () => {
+      console.error("Failed to load mask image");
+      setError("Failed to load mask image. Please check that the image exists in the public directory.");
+    };
+    
+    preloadAstronaut.src = astronautPath;
+    preloadMask.src = maskPath;
+    
+    // Clean up function to prevent memory leaks
+    return () => {
+      preloadAstronaut.onload = null;
+      preloadAstronaut.onerror = null;
+      preloadMask.onload = null;
+      preloadMask.onerror = null;
+    };
+  }, []);
+
+  // Dropzone configuration for reference image upload
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      "image/*": []
+    },
+    maxFiles: 1,
+    onDrop: (acceptedFiles) => {
+      const file = acceptedFiles[0];
+      setReferenceImage(file);
+      
+      // Create preview URL for the uploaded image
+      const previewUrl = URL.createObjectURL(file);
+      setReferencePreview(previewUrl);
+    }
+  });
+
+  // Handle the inpainting process
+  const handleInpaint = async () => {
+    if (!referenceImage) {
+      setError("Please upload a reference image first");
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("reference_image", referenceImage); // Backend expects 'reference_image'
+
+      console.log('Sending request to /api/inpaint with reference_image...');
+      const response = await fetch("/api/inpaint", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let errorMsg = `Server error: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          console.error('API error response:', errorData);
+          errorMsg = errorData.error || errorMsg;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          // Keep the original errorMsg if parsing fails
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      console.log('API response data:', data);
+
+      if (!data.result || typeof data.result !== 'string') {
+        console.error('Invalid or missing result URL in API response:', data.result);
+        throw new Error('Failed to get a valid image URL from the API.');
+      }
+
+      const imageUrl = data.result.trim();
+      if (!imageUrl) {
+        throw new Error('Empty image URL received from the API');
+      }
+
+      // Validate that the URL is properly formatted
+      try {
+        new URL(imageUrl); // This will throw if the URL is invalid
+        console.log('Setting valid result image URL:', imageUrl);
+        setResultImage(imageUrl);
+      } catch (urlError) {
+        console.error('Invalid URL format:', imageUrl, urlError);
+        throw new Error('Invalid URL format received from the API.');
+      }
+    } catch (err) {
+      console.error("Error during inpainting:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen p-8 bg-gray-50">
+      <header className="mb-10 text-center">
+        <h1 className="text-3xl font-bold mb-2">Pet Astronaut Inpainting</h1>
+        <p className="text-gray-600">Upload a pet image to create a photorealistic pet astronaut</p>
+      </header>
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Astronaut Image</h2>
+            {astronautImage ? (
+              <div className="relative h-80 w-full">
+                <Image 
+                  src={astronautImage} 
+                  alt="Astronaut suit with head area removed" 
+                  fill 
+                  className="object-contain rounded-md" 
+                />
+              </div>
+            ) : (
+              <div className="h-80 bg-gray-200 rounded-md flex items-center justify-center">
+                <p>Loading astronaut image...</p>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Mask Image</h2>
+            {maskImage ? (
+              <div className="relative h-80 w-full">
+                <Image 
+                  src={maskImage} 
+                  alt="Mask for inpainting" 
+                  fill 
+                  className="object-contain rounded-md" 
+                />
+              </div>
+            ) : (
+              <div className="h-80 bg-gray-200 rounded-md flex items-center justify-center">
+                <p>Loading mask image...</p>
+              </div>
+            )}
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Upload Pet Reference Image</h2>
+            <div 
+              {...getRootProps()} 
+              className="border-2 border-dashed border-gray-300 rounded-md p-6 cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              <input {...getInputProps()} />
+              {referencePreview ? (
+                <div className="relative h-80 w-full">
+                  <Image 
+                    src={referencePreview} 
+                    alt="Uploaded pet reference" 
+                    fill 
+                    className="object-contain rounded-md" 
+                  />
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-gray-500">Drag & drop a pet image here, or click to select one</p>
+                  <p className="text-sm text-gray-400 mt-2">The pet&apos;s head will be used for the inpainting</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <button
+              onClick={handleInpaint}
+              disabled={!referenceImage || isLoading}
+              className={`w-full py-3 rounded-md font-medium text-white ${!referenceImage || isLoading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
+            >
+              {isLoading ? "Processing..." : "Create Pet Astronaut"}
+            </button>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md">
+                {error}
+              </div>
+            )}
+          </div>
+
+          {resultImage && resultImage.trim() !== '' && (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-xl font-semibold mb-4">Result</h2>
+              <div className="relative h-96 w-full">
+                <Image 
+                  src={resultImage} 
+                  alt="Generated pet astronaut" 
+                  fill 
+                  className="object-contain rounded-md" 
+                  unoptimized // Add this to avoid optimization issues with external URLs
+                />
+              </div>
+              <a 
+                href={resultImage} 
+                download="pet-astronaut.png"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mt-4 text-center py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Download Image
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

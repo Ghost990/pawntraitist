@@ -1,0 +1,6 @@
+<svg width="800" height="1200" xmlns="http://www.w3.org/2000/svg">
+      <rect width="800" height="1200" fill="#000000"/>
+      <circle cx="400" cy="250" r="150" fill="#ffffff"/>
+      <text x="400" y="600" font-family="Arial" font-size="24" text-anchor="middle" fill="#ffffff">Mask Placeholder</text>
+      <text x="400" y="650" font-family="Arial" font-size="18" text-anchor="middle" fill="#ffffff">(Replace with actual mask image)</text>
+    </svg>
